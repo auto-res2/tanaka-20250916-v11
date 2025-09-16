@@ -131,7 +131,7 @@ def save_vae_model(model, model_path="models/zla_lr_vae_model.pth"):
     torch.save(model.state_dict(), model_path)
     print(f"VAE model saved to {model_path}")
 
-def plot_training_curves(train_losses, save_path=".research/iteration2/images"):
+def plot_training_curves(train_losses, save_path=".research/iteration3/images"):
     """Plot and save training curves as PDF."""
     os.makedirs(save_path, exist_ok=True)
     
