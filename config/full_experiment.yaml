@@ -22,5 +22,5 @@ evaluation:
   metrics: ["auroc", "aupr", "fpr95"]
   
 output:
-  images_dir: ".research/iteration4/images"
-  results_dir: ".research/iteration4"
+  images_dir: ".research/iteration5/images"
+  results_dir: ".research/iteration5"

@@ -18,5 +18,5 @@ zla_lr:
   max_refinement_steps: 1
   
 output:
-  images_dir: ".research/iteration4/images"
-  results_dir: ".research/iteration4"
+  images_dir: ".research/iteration5/images"
+  results_dir: ".research/iteration5"

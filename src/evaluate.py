@@ -129,7 +129,7 @@ def evaluate_anomaly_detection(vae_model, id_loader, ood_loaders, config, device
     
     return results
 
-def plot_score_distributions(results, save_path=".research/iteration4/images"):
+def plot_score_distributions(results, save_path=".research/iteration5/images"):
     """Plot score distributions for ID and OOD data."""
     os.makedirs(save_path, exist_ok=True)
     
@@ -166,7 +166,7 @@ def plot_score_distributions(results, save_path=".research/iteration4/images"):
     plt.close()
     print(f"Score distributions saved to {save_path}/score_distributions.pdf")
 
-def save_results_json(results, config, save_path=".research/iteration4"):
+def save_results_json(results, config, save_path=".research/iteration5"):
     """Save evaluation results as JSON."""
     os.makedirs(save_path, exist_ok=True)
     
