@@ -1,99 +1,264 @@
 import os
 import sys
-import time
+import argparse
+import yaml
 from datetime import datetime
+import torch
 
-def main():
-    """Main experimental pipeline for example_method."""
+def load_config(config_path):
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+def run_smoke_test():
+    """Run smoke test with reduced parameters for quick validation."""
     print("=" * 60)
-    print("EXAMPLE_METHOD EXPERIMENT - MAIN PIPELINE")
+    print("ZLA-LR-VAE SMOKE TEST")
     print("=" * 60)
-    print(f"Experiment started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print('Hello, world!')
+    print(f"Smoke test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
     
     try:
-        print("Step 1: Data Preprocessing")
-        print("-" * 30)
-        from preprocess import generate_synthetic_data, preprocess_data, save_preprocessed_data
-        
-        X, y = generate_synthetic_data()
-        X_train, X_test, y_train, y_test, scaler = preprocess_data(X, y)
-        save_preprocessed_data(X_train, X_test, y_train, y_test, scaler)
-        print("✓ Data preprocessing completed successfully!")
+        config = load_config("config/smoke_test.yaml")
+        print(f"Loaded smoke test configuration: {config['experiment']['name']}")
+        print(f"Dataset: {config['experiment']['dataset']}")
+        print(f"Epochs: {config['experiment']['epochs']}")
+        print(f"Subset size: {config['experiment']['subset_size']}")
         print()
         
-        print("Step 2: Model Training")
-        print("-" * 30)
-        from train import ExampleMethodModel, load_training_data, create_data_loader, train_model, save_model, plot_training_curves
-        import torch
+        print("Step 1: Data Loading and Preprocessing")
+        print("-" * 40)
+        from preprocess import load_dataset_by_name, create_data_loaders
+        
+        train_dataset, test_dataset = load_dataset_by_name(
+            config['experiment']['dataset'], 
+            subset_size=config['experiment']['subset_size']
+        )
+        train_loader, test_loader = create_data_loaders(
+            train_dataset, test_dataset, 
+            batch_size=config['experiment']['batch_size']
+        )
+        print("✓ Data loading completed successfully!")
+        print()
+        
+        print("Step 2: VAE Model Training")
+        print("-" * 40)
+        from train import VAE, train_vae, save_vae_model, plot_training_curves
         
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Using device: {device}")
         
-        X_train_loaded, y_train_loaded = load_training_data()
-        train_loader = create_data_loader(X_train_loaded, y_train_loaded)
+        model = VAE(
+            latent_dim=config['model']['latent_dim'],
+            hidden_dim=config['model']['hidden_dim']
+        )
         
-        model = ExampleMethodModel(input_dim=X_train_loaded.shape[1])
-        train_losses, train_accuracies = train_model(model, train_loader, num_epochs=30, device=device)
+        train_losses = train_vae(
+            model, train_loader, 
+            num_epochs=config['experiment']['epochs'],
+            learning_rate=float(config['training']['learning_rate']),
+            device=device
+        )
         
-        save_model(model)
-        plot_training_curves(train_losses, train_accuracies)
-        print("✓ Model training completed successfully!")
+        save_vae_model(model)
+        plot_training_curves(train_losses, save_path=config['output']['images_dir'])
+        print("✓ VAE training completed successfully!")
         print()
         
-        print("Step 3: Model Evaluation")
-        print("-" * 30)
-        from evaluate import load_test_data, load_model, evaluate_model, plot_confusion_matrix, plot_prediction_distribution
+        print("Step 3: ZLA-LR-VAE Evaluation")
+        print("-" * 40)
+        from evaluate import evaluate_anomaly_detection, plot_score_distributions, save_results_json
+        from preprocess import load_ood_datasets
         
-        X_test_loaded, y_test_loaded = load_test_data()
-        trained_model = load_model(input_dim=X_test_loaded.shape[1])
+        ood_loaders = load_ood_datasets(["cifar100"])
         
-        y_pred, test_accuracy = evaluate_model(trained_model, X_test_loaded, y_test_loaded, device=device)
+        results = evaluate_anomaly_detection(
+            model, test_loader, ood_loaders, config, device
+        )
         
-        plot_confusion_matrix(y_test_loaded, y_pred)
-        plot_prediction_distribution(y_test_loaded, y_pred)
-        print("✓ Model evaluation completed successfully!")
+        plot_score_distributions(results, save_path=config['output']['images_dir'])
+        json_results = save_results_json(results, config, save_path=config['output']['results_dir'])
+        print("✓ ZLA-LR-VAE evaluation completed successfully!")
         print()
         
         print("=" * 60)
-        print("EXPERIMENT SUMMARY")
+        print("SMOKE TEST SUMMARY")
         print("=" * 60)
-        print(f"Method: example_method")
-        print(f"Dataset: Synthetic classification data")
-        print(f"Training samples: {len(X_train_loaded)}")
-        print(f"Test samples: {len(X_test_loaded)}")
-        print(f"Features: {X_train_loaded.shape[1]}")
-        print(f"Classes: 2")
+        print(f"Method: ZLA-LR-VAE")
+        print(f"Dataset: {config['experiment']['dataset']}")
+        print(f"Training samples: {len(train_dataset)}")
+        print(f"Test samples: {len(test_dataset)}")
+        print(f"Latent dimension: {config['model']['latent_dim']}")
+        print(f"Hidden dimension: {config['model']['hidden_dim']}")
         print(f"Device used: {device}")
-        print(f"Training epochs: 30")
-        print(f"Final training accuracy: {train_accuracies[-1]:.4f}")
-        print(f"Test accuracy: {test_accuracy:.4f}")
+        print(f"Training epochs: {config['experiment']['epochs']}")
+        print(f"Final training loss: {train_losses[-1]:.4f}")
+        print(f"Tau threshold: {config['zla_lr']['tau']}")
+        print(f"Max refinement steps: {config['zla_lr']['max_refinement_steps']}")
+        print()
+        
+        print("Anomaly Detection Results:")
+        for ood_name, ood_data in json_results['ood_results'].items():
+            print(f"- {ood_name}: AUROC = {ood_data['auroc']:.4f}, AUPR = {ood_data['aupr']:.4f}")
         print()
         
         print("Generated Files:")
-        print("- Training curves: .research/iteration1/images/training_curves.pdf")
-        print("- Confusion matrix: .research/iteration1/images/confusion_matrix.pdf")
-        print("- Prediction distribution: .research/iteration1/images/prediction_distribution.pdf")
-        print("- Trained model: models/example_method_model.pth")
-        print("- Preprocessed data: data/")
+        print(f"- VAE training curves: {config['output']['images_dir']}/vae_training_curves.pdf")
+        print(f"- Score distributions: {config['output']['images_dir']}/score_distributions.pdf")
+        print(f"- Results JSON: {config['output']['results_dir']}/{config['experiment']['name']}_results.json")
+        print("- Trained VAE model: models/zla_lr_vae_model.pth")
         print()
         
-        status_enum = "stopped"
-        print(f"Experiment status: {status_enum}")
-        print(f"Experiment completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Smoke test completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 60)
         
         return True
         
     except Exception as e:
-        print(f"❌ Error during experiment: {str(e)}")
+        print(f"❌ Error during smoke test: {str(e)}")
         print(f"Error type: {type(e).__name__}")
         import traceback
         traceback.print_exc()
+        return False
+
+def run_full_experiment():
+    """Run full experiment with complete parameters."""
+    print("=" * 60)
+    print("ZLA-LR-VAE FULL EXPERIMENT")
+    print("=" * 60)
+    print(f"Full experiment started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print()
+    
+    try:
+        config = load_config("config/full_experiment.yaml")
+        print(f"Loaded full experiment configuration: {config['experiment']['name']}")
+        print(f"Dataset: {config['experiment']['dataset']}")
+        print(f"Epochs: {config['experiment']['epochs']}")
+        print()
         
-        status_enum = "stopped"
-        print(f"Experiment status: {status_enum}")
+        print("Step 1: Data Loading and Preprocessing")
+        print("-" * 40)
+        from preprocess import load_dataset_by_name, create_data_loaders
+        
+        train_dataset, test_dataset = load_dataset_by_name(config['experiment']['dataset'])
+        train_loader, test_loader = create_data_loaders(
+            train_dataset, test_dataset, 
+            batch_size=config['experiment']['batch_size']
+        )
+        print("✓ Data loading completed successfully!")
+        print()
+        
+        print("Step 2: VAE Model Training")
+        print("-" * 40)
+        from train import VAE, train_vae, save_vae_model, plot_training_curves
+        
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"Using device: {device}")
+        
+        model = VAE(
+            latent_dim=config['model']['latent_dim'],
+            hidden_dim=config['model']['hidden_dim']
+        )
+        
+        train_losses = train_vae(
+            model, train_loader, 
+            num_epochs=config['experiment']['epochs'],
+            learning_rate=float(config['training']['learning_rate']),
+            device=device
+        )
+        
+        save_vae_model(model)
+        plot_training_curves(train_losses, save_path=config['output']['images_dir'])
+        print("✓ VAE training completed successfully!")
+        print()
+        
+        print("Step 3: ZLA-LR-VAE Evaluation")
+        print("-" * 40)
+        from evaluate import evaluate_anomaly_detection, plot_score_distributions, save_results_json
+        from preprocess import load_ood_datasets
+        
+        ood_loaders = load_ood_datasets(config['evaluation']['ood_datasets'])
+        
+        results = evaluate_anomaly_detection(
+            model, test_loader, ood_loaders, config, device
+        )
+        
+        plot_score_distributions(results, save_path=config['output']['images_dir'])
+        json_results = save_results_json(results, config, save_path=config['output']['results_dir'])
+        print("✓ ZLA-LR-VAE evaluation completed successfully!")
+        print()
+        
+        print("=" * 60)
+        print("FULL EXPERIMENT SUMMARY")
+        print("=" * 60)
+        print(f"Method: ZLA-LR-VAE")
+        print(f"Dataset: {config['experiment']['dataset']}")
+        print(f"Training samples: {len(train_dataset)}")
+        print(f"Test samples: {len(test_dataset)}")
+        print(f"Latent dimension: {config['model']['latent_dim']}")
+        print(f"Hidden dimension: {config['model']['hidden_dim']}")
+        print(f"Device used: {device}")
+        print(f"Training epochs: {config['experiment']['epochs']}")
+        print(f"Final training loss: {train_losses[-1]:.4f}")
+        print(f"Tau threshold: {config['zla_lr']['tau']}")
+        print(f"Max refinement steps: {config['zla_lr']['max_refinement_steps']}")
+        print()
+        
+        print("Anomaly Detection Results:")
+        for ood_name, ood_data in json_results['ood_results'].items():
+            print(f"- {ood_name}: AUROC = {ood_data['auroc']:.4f}, AUPR = {ood_data['aupr']:.4f}")
+        print()
+        
+        print("Generated Files:")
+        print(f"- VAE training curves: {config['output']['images_dir']}/vae_training_curves.pdf")
+        print(f"- Score distributions: {config['output']['images_dir']}/score_distributions.pdf")
+        print(f"- Results JSON: {config['output']['results_dir']}/{config['experiment']['name']}_results.json")
+        print("- Trained VAE model: models/zla_lr_vae_model.pth")
+        print()
+        
+        print(f"Full experiment completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60)
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error during full experiment: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def main():
+    """Main entry point with command-line argument support."""
+    parser = argparse.ArgumentParser(description='ZLA-LR-VAE Experimental Framework')
+    parser.add_argument('--smoke-test', action='store_true', 
+                       help='Run smoke test with reduced parameters for quick validation')
+    parser.add_argument('--full-experiment', action='store_true',
+                       help='Run full experiment with complete parameters')
+    
+    args = parser.parse_args()
+    
+    if args.smoke_test and args.full_experiment:
+        print("Error: Cannot run both smoke test and full experiment simultaneously")
+        return False
+    
+    if args.smoke_test:
+        print("Running smoke test first...")
+        smoke_success = run_smoke_test()
+        if not smoke_success:
+            print("Smoke test failed. Aborting.")
+            return False
+        print("Smoke test passed! Ready for full experiment.")
+        return True
+        
+    elif args.full_experiment:
+        print("Running full experiment...")
+        return run_full_experiment()
+        
+    else:
+        print("Error: Must specify either --smoke-test or --full-experiment")
+        parser.print_help()
         return False
 
 if __name__ == "__main__":

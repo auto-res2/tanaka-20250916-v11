@@ -1,0 +1,26 @@
+experiment:
+  name: "ZLA-LR-VAE-full-experiment"
+  epochs: 100
+  batch_size: 512
+  dataset: "cifar10"
+  
+model:
+  latent_dim: 64
+  hidden_dim: 128
+  
+training:
+  learning_rate: 0.0003
+  weight_decay: 0.000001
+  early_stopping_patience: 20
+  
+zla_lr:
+  tau: 0.05
+  max_refinement_steps: 3
+  
+evaluation:
+  ood_datasets: ["svhn", "lsun", "celeba", "cifar100"]
+  metrics: ["auroc", "aupr", "fpr95"]
+  
+output:
+  images_dir: ".research/iteration2/images"
+  results_dir: ".research/iteration2"

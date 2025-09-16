@@ -1,63 +1,114 @@
 import numpy as np
-import pandas as pd
-from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import torch
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, Subset
+from datasets import load_dataset
 import os
 
-def generate_synthetic_data(n_samples=1000, n_features=20, n_classes=2, random_state=42):
-    """Generate synthetic classification data for the example_method experiment."""
-    print(f"Generating synthetic dataset with {n_samples} samples, {n_features} features, {n_classes} classes")
+def load_dataset_by_name(dataset_name, subset_size=None):
+    """Load dataset by name with optional subset for smoke testing."""
+    print(f"Loading dataset: {dataset_name}")
     
-    X, y = make_classification(
-        n_samples=n_samples,
-        n_features=n_features,
-        n_informative=n_features//2,
-        n_redundant=n_features//4,
-        n_classes=n_classes,
-        random_state=random_state
-    )
+    if dataset_name == "cifar10":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        
+        train_dataset = torchvision.datasets.CIFAR10(
+            root='./data', train=True, download=True, transform=transform
+        )
+        test_dataset = torchvision.datasets.CIFAR10(
+            root='./data', train=False, download=True, transform=transform
+        )
+        
+    elif dataset_name == "fashion_mnist":
+        transform = transforms.Compose([
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: x.repeat(3, 1, 1) if x.size(0) == 1 else x),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        
+        train_dataset = torchvision.datasets.FashionMNIST(
+            root='./data', train=True, download=True, transform=transform
+        )
+        test_dataset = torchvision.datasets.FashionMNIST(
+            root='./data', train=False, download=True, transform=transform
+        )
+        
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
     
-    return X, y
+    if subset_size is not None:
+        print(f"Using subset of {subset_size} samples for smoke test")
+        train_indices = torch.randperm(len(train_dataset))[:subset_size]
+        test_indices = torch.randperm(len(test_dataset))[:subset_size//5]
+        train_dataset = Subset(train_dataset, train_indices)
+        test_dataset = Subset(test_dataset, test_indices)
+    
+    print(f"Training samples: {len(train_dataset)}")
+    print(f"Test samples: {len(test_dataset)}")
+    
+    return train_dataset, test_dataset
 
-def preprocess_data(X, y, test_size=0.2, random_state=42):
-    """Preprocess the data by splitting and scaling."""
-    print("Splitting data into train/test sets...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y
-    )
+def create_data_loaders(train_dataset, test_dataset, batch_size=64):
+    """Create data loaders for training and testing."""
+    train_loader = None
+    test_loader = None
     
-    print("Scaling features...")
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    if train_dataset is not None:
+        train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        )
     
-    print(f"Training set shape: {X_train_scaled.shape}")
-    print(f"Test set shape: {X_test_scaled.shape}")
-    print(f"Class distribution in training set: {np.bincount(y_train)}")
-    print(f"Class distribution in test set: {np.bincount(y_test)}")
+    if test_dataset is not None:
+        test_loader = DataLoader(
+            test_dataset, batch_size=batch_size, shuffle=False, num_workers=2
+        )
     
-    return X_train_scaled, X_test_scaled, y_train, y_test, scaler
+    return train_loader, test_loader
 
-def save_preprocessed_data(X_train, X_test, y_train, y_test, scaler, data_dir="data"):
-    """Save preprocessed data to files."""
-    os.makedirs(data_dir, exist_ok=True)
+def load_ood_datasets(dataset_names):
+    """Load out-of-distribution datasets for evaluation."""
+    ood_loaders = {}
     
-    print(f"Saving preprocessed data to {data_dir}/...")
-    np.save(os.path.join(data_dir, "X_train.npy"), X_train)
-    np.save(os.path.join(data_dir, "X_test.npy"), X_test)
-    np.save(os.path.join(data_dir, "y_train.npy"), y_train)
-    np.save(os.path.join(data_dir, "y_test.npy"), y_test)
+    for dataset_name in dataset_names:
+        print(f"Loading OOD dataset: {dataset_name}")
+        
+        if dataset_name == "svhn":
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
+            dataset = torchvision.datasets.SVHN(
+                root='./data', split='test', download=True, transform=transform
+            )
+            
+        elif dataset_name == "cifar100":
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
+            dataset = torchvision.datasets.CIFAR100(
+                root='./data', train=False, download=True, transform=transform
+            )
+            
+        else:
+            print(f"Skipping unsupported OOD dataset: {dataset_name}")
+            continue
+            
+        ood_loaders[dataset_name] = DataLoader(
+            dataset, batch_size=64, shuffle=False, num_workers=2
+        )
     
-    import joblib
-    joblib.dump(scaler, os.path.join(data_dir, "scaler.pkl"))
-    
-    print("Data preprocessing completed successfully!")
+    return ood_loaders
 
 if __name__ == "__main__":
-    print("=== Data Preprocessing for example_method ===")
-    print('Hello, world!')
+    print("=== Data Preprocessing for ZLA-LR-VAE ===")
     
-    X, y = generate_synthetic_data()
-    X_train, X_test, y_train, y_test, scaler = preprocess_data(X, y)
-    save_preprocessed_data(X_train, X_test, y_train, y_test, scaler)
+    train_dataset, test_dataset = load_dataset_by_name("fashion_mnist", subset_size=1000)
+    train_loader, test_loader = create_data_loaders(train_dataset, test_dataset)
+    
+    print("Data preprocessing completed successfully!")

@@ -1,0 +1,22 @@
+experiment:
+  name: "ZLA-LR-VAE-smoke-test"
+  epochs: 2
+  batch_size: 64
+  dataset: "fashion_mnist"
+  subset_size: 1000  # Use only 1000 samples for quick test
+  
+model:
+  latent_dim: 32
+  hidden_dim: 64
+  
+training:
+  learning_rate: 0.0003
+  weight_decay: 0.000001
+  
+zla_lr:
+  tau: 0.05
+  max_refinement_steps: 1
+  
+output:
+  images_dir: ".research/iteration2/images"
+  results_dir: ".research/iteration2"
