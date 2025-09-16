@@ -3,5 +3,19 @@
   "queries": [
     "variational autoencoder anomaly detection",
     "unsupervised VAE anomaly detection"
+  ],
+  "research_study_list": [
+    {
+      "title": "Rate-distortion optimization guided autoencoder for isometric embedding in Euclidean latent space"
+    },
+    {
+      "title": "Likelihood Regret: An Out-of-Distribution Detection Score For Variational Auto-encoder"
+    },
+    {
+      "title": "Robust Subspace Recovery Layer for Unsupervised Anomaly Detection"
+    },
+    {
+      "title": "Rate-distortion optimization guided autoencoder for isometric embedding in Euclidean latent space"
+    }
   ]
 }
